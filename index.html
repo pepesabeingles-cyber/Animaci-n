@@ -848,13 +848,13 @@ const PROGRESSION = [
   { bass: 110.00, arp: [220.00, 277.18, 329.63, 440.00], pad: [220.00, 329.63] }, // A
 ];
 
+const MUSIC_VOL = 0.6;
+
 function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 0.0001;
   masterGain.connect(audioCtx.destination);
-  // fundido de entrada
-  masterGain.gain.exponentialRampToValueAtTime(0.45, audioCtx.currentTime + 2.5);
 
   // eco suave (sensación de espacio/reverb)
   const delay = audioCtx.createDelay();
@@ -864,6 +864,15 @@ function initAudio() {
   delayWet = audioCtx.createGain(); delayWet.gain.value = 0.32;
   delay.connect(delayWet); delayWet.connect(masterGain);
   window._delayNode = delay;
+}
+
+// Desbloqueo del audio en iOS/Safari: un buffer mudo dentro del gesto
+function unlockAudio() {
+  const buf = audioCtx.createBuffer(1, 1, 22050);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.start(0);
 }
 
 function note(freq, time, dur, vol, type = 'sine') {
@@ -908,9 +917,18 @@ function scheduler() {
 
 function startMusic() {
   if (!audioCtx) initAudio();
+  unlockAudio();
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  nextNoteTime = audioCtx.currentTime + 0.1;
+
+  // Fundido de entrada en CADA arranque (anclado correctamente)
+  const now = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setValueAtTime(Math.max(masterGain.gain.value, 0.0001), now);
+  masterGain.gain.exponentialRampToValueAtTime(MUSIC_VOL, now + 2.0);
+
+  nextNoteTime = now + 0.1;
   step = 0;
+  clearInterval(schedulerTimer);
   schedulerTimer = setInterval(scheduler, 25);
   musicOn = true;
   document.getElementById('music').textContent = '♪';
@@ -919,9 +937,10 @@ function startMusic() {
 function stopMusic() {
   clearInterval(schedulerTimer);
   if (masterGain) {
-    masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
-    masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6);
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setValueAtTime(Math.max(masterGain.gain.value, 0.0001), now);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
   }
   musicOn = false;
   document.getElementById('music').textContent = '🔇';
