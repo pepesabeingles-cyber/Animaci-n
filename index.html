@@ -51,22 +51,54 @@ resize();
 window.addEventListener('resize', () => { resize(); buildStars(); buildNebula(); buildHeartConstellation(); buildTextStars(); });
 
 // ─────────────────────────────────────────────
-//  ZOOM
+//  ZOOM + PANEO 360°
 // ─────────────────────────────────────────────
 let zoom = 1, targetZoom = 1;
 const ZOOM_MIN = 0.06, ZOOM_MAX = 5;
+
+// Desplazamiento de cámara (arrastrar para mirar en todas direcciones)
+let panX = 0, panY = 0, targetPanX = 0, targetPanY = 0;
+let dragging = false, dragLastX = 0, dragLastY = 0;
+
 window.addEventListener('wheel', e => {
   targetZoom *= e.deltaY > 0 ? 0.88 : 1.14;
   targetZoom  = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom));
 }, { passive: true });
+
+// — Arrastre con mouse —
+canvas.addEventListener('mousedown', e => {
+  dragging = true; dragLastX = e.clientX; dragLastY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  targetPanX += e.clientX - dragLastX;
+  targetPanY += e.clientY - dragLastY;
+  dragLastX = e.clientX; dragLastY = e.clientY;
+});
+window.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'grab'; });
+canvas.style.cursor = 'grab';
+
+// — Táctil: 1 dedo = paneo · 2 dedos = zoom —
 let lastPinchDist = null;
 function pinchDist(e) {
   return Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
                     e.touches[0].clientY - e.touches[1].clientY);
 }
-canvas.addEventListener('touchstart',  e => { if (e.touches.length === 2) lastPinchDist = pinchDist(e); }, { passive: true });
-canvas.addEventListener('touchmove',   e => {
-  if (e.touches.length === 2) {
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragging = true; dragLastX = e.touches[0].clientX; dragLastY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    dragging = false; lastPinchDist = pinchDist(e);
+  }
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && dragging) {
+    e.preventDefault();
+    targetPanX += e.touches[0].clientX - dragLastX;
+    targetPanY += e.touches[0].clientY - dragLastY;
+    dragLastX = e.touches[0].clientX; dragLastY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
     e.preventDefault(); // bloquea el zoom de página del navegador
     if (lastPinchDist) {
       const d = pinchDist(e); targetZoom *= d / lastPinchDist;
@@ -75,7 +107,14 @@ canvas.addEventListener('touchmove',   e => {
     lastPinchDist = pinchDist(e);
   }
 }, { passive: false });
-canvas.addEventListener('touchend', () => { lastPinchDist = null; }, { passive: true });
+canvas.addEventListener('touchend', e => {
+  if (e.touches.length === 0) dragging = false;
+  lastPinchDist = null;
+}, { passive: true });
+
+// Doble clic / doble toque: vuelve al centro
+canvas.addEventListener('dblclick', () => { targetPanX = 0; targetPanY = 0; targetZoom = 1; });
+
 // iOS Safari: evita el gesto de zoom nativo
 ['gesturestart','gesturechange','gestureend'].forEach(ev =>
   document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
@@ -1009,6 +1048,8 @@ let t = 0;
 function frame() {
   t++;
   zoom += (targetZoom - zoom) * 0.055;
+  panX += (targetPanX - panX) * 0.12;
+  panY += (targetPanY - panY) * 0.12;
   const camAngle    = t * 0.00068;
   const universeAlpha = Math.max(0, Math.min(1, (0.62 - zoom) / 0.32));
 
@@ -1018,14 +1059,15 @@ function frame() {
   ctx.fillStyle = '#000008';
   ctx.fillRect(0, 0, W, H);
 
-  // — Fondo fijo —
+  // — Fondo fijo (estrellas, nebulosas y mensaje) —
   drawStars(t);
   drawNebula();
   drawHeartConstellation(t);
   drawTextStars(t);
 
-  // ── Zona con zoom ──────────────────────────
+  // ── Zona con zoom + paneo 360° ─────────────
   ctx.save();
+  ctx.translate(panX, panY);
   ctx.translate(cx, cy);
   ctx.scale(zoom, zoom);
   ctx.translate(-cx, -cy);
