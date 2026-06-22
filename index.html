@@ -2,12 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
   <title>∞</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
-    canvas { display: block; }
+    html, body { background: #000; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+    canvas { display: block; touch-action: none; }
   </style>
 </head>
 <body>
@@ -47,12 +47,19 @@ function pinchDist(e) {
 }
 canvas.addEventListener('touchstart',  e => { if (e.touches.length === 2) lastPinchDist = pinchDist(e); }, { passive: true });
 canvas.addEventListener('touchmove',   e => {
-  if (e.touches.length === 2 && lastPinchDist) {
-    const d = pinchDist(e); targetZoom *= d / lastPinchDist;
-    targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom)); lastPinchDist = d;
+  if (e.touches.length === 2) {
+    e.preventDefault(); // bloquea el zoom de página del navegador
+    if (lastPinchDist) {
+      const d = pinchDist(e); targetZoom *= d / lastPinchDist;
+      targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom));
+    }
+    lastPinchDist = pinchDist(e);
   }
-}, { passive: true });
+}, { passive: false });
 canvas.addEventListener('touchend', () => { lastPinchDist = null; }, { passive: true });
+// iOS Safari: evita el gesto de zoom nativo
+['gesturestart','gesturechange','gestureend'].forEach(ev =>
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 
 // ─────────────────────────────────────────────
 //  CAPA 1 · ESTRELLAS
@@ -501,29 +508,37 @@ function drawRose(x, y, s, hue, alpha, withStem = false) {
 // ─────────────────────────────────────────────
 let cosmicRoses = [];
 function spawnCosmicRose() {
+  // Igual que los corazones: nacen del centro o por toda la pantalla
+  const fromCenter = Math.random() < 0.5;
+  const x = fromCenter ? cx + (Math.random() - 0.5) * 220 : Math.random() * W;
+  const y = fromCenter ? cy + (Math.random() - 0.5) * 220 : Math.random() * H;
   cosmicRoses.push({
-    x: Math.random() * W,
-    y: H + 30,
-    s: 9 + Math.random() * 12,
-    vx: (Math.random() - 0.5) * 0.3,
-    vy: -0.25 - Math.random() * 0.35,
-    hue: [340, 350, 0, 330, 320][Math.floor(Math.random() * 5)],
+    x, y,
+    s: 7 + Math.random() * 14,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: -0.15 - Math.random() * 0.4,
+    hue: [340, 350, 0, 330, 320, 355][Math.floor(Math.random() * 6)],
     life: 1,
-    rot: (Math.random() - 0.5) * 0.4,
-    rotV: (Math.random() - 0.5) * 0.006,
+    rot: (Math.random() - 0.5) * 0.6,
+    rotV: (Math.random() - 0.5) * 0.01,
     sway: Math.random() * Math.PI * 2,
   });
 }
 function updateCosmicRoses(t) {
-  if (t % 50 === 0) { spawnCosmicRose(); if (Math.random() < 0.5) spawnCosmicRose(); }
-  cosmicRoses = cosmicRoses.filter(r => r.life > 0 && r.y > -40);
+  // Tan frecuentes como los corazones: grupos cada 14 frames
+  if (t % 14 === 0) {
+    spawnCosmicRose();
+    spawnCosmicRose();
+    if (Math.random() < 0.5) spawnCosmicRose();
+  }
+  cosmicRoses = cosmicRoses.filter(r => r.life > 0);
   for (const r of cosmicRoses) {
     r.sway += 0.02;
     r.x    += r.vx + Math.sin(r.sway) * 0.3;
     r.y    += r.vy;
     r.rot  += r.rotV;
-    r.life -= 0.0025;
-    const alpha = Math.min(1, r.life * 1.4) * 0.9;
+    r.life -= 0.004;
+    const alpha = r.life * (0.5 + 0.5 * Math.sin(r.life * Math.PI)) * 0.95;
     ctx.save();
     ctx.translate(r.x, r.y);
     ctx.rotate(r.rot);
@@ -795,44 +810,6 @@ const COMET_AMOR = { rxBase: 720, ryRatio: 0.18, speed: 0.00032, startAngle: 0.8
 const BELT_MIN = 315, BELT_MAX = 365;
 
 // ─────────────────────────────────────────────
-//  RAMO DE ROSAS (fijo, esquina inferior izquierda)
-// ─────────────────────────────────────────────
-function drawBouquet(t) {
-  const baseS = Math.min(W, H) * 0.05;
-  const bx = baseS * 1.6, by = H - baseS * 0.6;
-  const sway = Math.sin(t * 0.003) * 0.04;
-  ctx.save();
-  ctx.translate(bx, by);
-  ctx.rotate(sway);
-
-  // 3 rosas con tallo formando ramo
-  const roses = [
-    { dx: -baseS * 0.55, dy: -baseS * 1.1, s: baseS * 0.55, hue: 345, rot: -0.35 },
-    { dx:  baseS * 0.55, dy: -baseS * 1.0, s: baseS * 0.50, hue: 330, rot:  0.30 },
-    { dx:  0,            dy: -baseS * 1.6, s: baseS * 0.62, hue: 350, rot:  0    },
-  ];
-  for (const r of roses) {
-    ctx.save();
-    ctx.translate(r.dx, r.dy);
-    ctx.rotate(r.rot);
-    drawRose(0, 0, r.s, r.hue, 0.95, true);
-    ctx.restore();
-  }
-  // lazo del ramo
-  ctx.fillStyle = 'hsla(330,80%,60%,0.9)';
-  ctx.beginPath();
-  ctx.ellipse(-baseS * 0.18, 0, baseS * 0.22, baseS * 0.14, -0.5, 0, Math.PI * 2);
-  ctx.ellipse( baseS * 0.18, 0, baseS * 0.22, baseS * 0.14,  0.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(0, 0, baseS * 0.10, 0, Math.PI * 2);
-  ctx.fillStyle = 'hsla(340,85%,50%,0.95)';
-  ctx.fill();
-
-  ctx.restore();
-}
-
-// ─────────────────────────────────────────────
 //  BUCLE PRINCIPAL
 // ─────────────────────────────────────────────
 let t = 0;
@@ -928,9 +905,6 @@ function frame() {
   // Corazones y rosas flotantes en pantalla (encima de todo)
   updateCosmicRoses(t);
   updateCosmicHearts(t);
-
-  // Ramo de rosas fijo en la esquina inferior izquierda
-  drawBouquet(t);
 
   requestAnimationFrame(frame);
 }
