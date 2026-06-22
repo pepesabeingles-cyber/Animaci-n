@@ -3,25 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Galaxia — Ecosistema Orbital</title>
+  <title>∞</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; overflow: hidden; }
     canvas { display: block; }
-    #info {
-      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-      color: rgba(180,200,255,0.4); font-family: monospace; font-size: 11px;
-      letter-spacing: 2px; pointer-events: none;
-    }
   </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="info">GALAXIA · ECOSISTEMA ORBITAL</div>
 <script>
-// ─────────────────────────────────────────────
-//  CONFIGURACIÓN
-// ─────────────────────────────────────────────
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 let W, H, cx, cy;
@@ -29,28 +20,54 @@ let W, H, cx, cy;
 function resize() {
   W = canvas.width  = window.innerWidth;
   H = canvas.height = window.innerHeight;
-  cx = W / 2;
-  cy = H / 2;
+  cx = W / 2; cy = H / 2;
 }
 resize();
 window.addEventListener('resize', () => { resize(); buildStars(); buildNebula(); });
 
 // ─────────────────────────────────────────────
-//  CAPA 1 · ESTRELLAS DE FONDO
+//  ZOOM — rueda del mouse + pellizco táctil
+// ─────────────────────────────────────────────
+let zoom = 1, targetZoom = 1;
+
+window.addEventListener('wheel', e => {
+  targetZoom *= e.deltaY > 0 ? 0.88 : 1.14;
+  targetZoom  = Math.max(0.06, Math.min(2.2, targetZoom));
+}, { passive: true });
+
+let lastPinchDist = null;
+function pinchDist(e) {
+  return Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY
+  );
+}
+canvas.addEventListener('touchstart',  e => { if (e.touches.length === 2) lastPinchDist = pinchDist(e); }, { passive: true });
+canvas.addEventListener('touchmove',   e => {
+  if (e.touches.length === 2 && lastPinchDist) {
+    const d = pinchDist(e);
+    targetZoom *= d / lastPinchDist;
+    targetZoom  = Math.max(0.06, Math.min(2.2, targetZoom));
+    lastPinchDist = d;
+  }
+}, { passive: true });
+canvas.addEventListener('touchend', () => { lastPinchDist = null; }, { passive: true });
+
+// ─────────────────────────────────────────────
+//  CAPA 1 · ESTRELLAS (fondo fijo)
 // ─────────────────────────────────────────────
 let stars = [];
 function buildStars() {
   stars = [];
-  for (let i = 0; i < 700; i++) {
+  for (let i = 0; i < 800; i++) {
     const r = Math.random();
     stars.push({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      r: r < 0.6 ? 0.4 : r < 0.9 ? 0.8 : 1.3,
+      x: Math.random() * W, y: Math.random() * H,
+      r:     r < 0.6 ? 0.4 : r < 0.9 ? 0.8 : 1.4,
       alpha: 0.3 + Math.random() * 0.7,
-      twinkleSpeed: 0.005 + Math.random() * 0.02,
-      twinkleOffset: Math.random() * Math.PI * 2,
-      hue: [200, 210, 220, 60, 30][Math.floor(Math.random() * 5)],
+      ts:    0.004 + Math.random() * 0.018,
+      to:    Math.random() * Math.PI * 2,
+      hue:   [200, 210, 220, 60, 30][Math.floor(Math.random() * 5)],
     });
   }
 }
@@ -58,8 +75,8 @@ buildStars();
 
 function drawStars(t) {
   for (const s of stars) {
-    const a = s.alpha * (0.6 + 0.4 * Math.sin(t * s.twinkleSpeed + s.twinkleOffset));
-    ctx.fillStyle = `hsla(${s.hue},80%,95%,${a})`;
+    const a = s.alpha * (0.6 + 0.4 * Math.sin(t * s.ts + s.to));
+    ctx.fillStyle = `hsla(${s.hue},80%,96%,${a})`;
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
     ctx.fill();
@@ -67,7 +84,7 @@ function drawStars(t) {
 }
 
 // ─────────────────────────────────────────────
-//  CAPA 2 · NEBULOSAS DE FONDO
+//  CAPA 2 · NEBULOSAS (fondo fijo)
 // ─────────────────────────────────────────────
 let nebulaClouds = [];
 function buildNebula() {
@@ -88,7 +105,6 @@ function drawNebula() {
     g.addColorStop(1,   `hsla(${n.hue},50%,20%,0)`);
     ctx.save();
     ctx.scale(1, n.ry / n.rx);
-    ctx.translate(0, n.x * (n.rx / n.rx - 1));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(n.x, n.y * (n.rx / n.ry), n.rx, n.rx, 0, 0, Math.PI * 2);
@@ -98,7 +114,7 @@ function drawNebula() {
 }
 
 // ─────────────────────────────────────────────
-//  CAPA 3 · NÚCLEO GALÁCTICO + BRAZOS ESPIRALES
+//  CAPA 3 · GALAXIA PRINCIPAL
 // ─────────────────────────────────────────────
 const GALAXY_PARTICLES = 2200;
 let gparticles = [];
@@ -107,34 +123,31 @@ function buildGalaxy() {
   gparticles = [];
   const arms = 3;
   for (let i = 0; i < GALAXY_PARTICLES; i++) {
-    const arm    = Math.floor(Math.random() * arms);
-    const dist   = 30 + Math.pow(Math.random(), 1.4) * 340;
-    const angle  = (arm / arms) * Math.PI * 2
-                 + (dist / 340) * Math.PI * 3.5
-                 + (Math.random() - 0.5) * 0.7;
+    const arm   = Math.floor(Math.random() * arms);
+    const dist  = 30 + Math.pow(Math.random(), 1.4) * 340;
+    const angle = (arm / arms) * Math.PI * 2
+                + (dist / 340) * Math.PI * 3.5
+                + (Math.random() - 0.5) * 0.7;
     const spread = (0.5 + Math.random() * 0.5) * (dist * 0.12);
     const ox = Math.cos(angle) * spread;
     const oy = Math.sin(angle) * spread * 0.4;
-
     const bright = dist < 80;
     gparticles.push({
       baseX: Math.cos(angle) * dist + ox,
       baseY: Math.sin(angle) * dist * 0.42 + oy,
-      dist,
       r:     bright ? 1.2 + Math.random() * 1 : 0.3 + Math.random() * 1.1,
       alpha: bright ? 0.7 + Math.random() * 0.3 : 0.2 + Math.random() * 0.6,
-      hue:   bright ? 50 + Math.random() * 30
+      hue:   bright ? 50  + Math.random() * 30
                     : [210, 220, 260, 280, 60][Math.floor(Math.random() * 5)],
       sat:   bright ? 80 : 60 + Math.random() * 40,
       lit:   bright ? 90 : 60 + Math.random() * 40,
-      speed: 0.00008 + (Math.random() * 0.00005),
+      speed: 0.00008 + Math.random() * 0.00005,
     });
   }
 }
 buildGalaxy();
 
 function drawGalaxy(t, camAngle = 0) {
-  // Glow central
   const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
   glow.addColorStop(0,    'rgba(255,240,180,0.55)');
   glow.addColorStop(0.15, 'rgba(255,200,100,0.25)');
@@ -145,7 +158,6 @@ function drawGalaxy(t, camAngle = 0) {
   ctx.arc(cx, cy, 120, 0, Math.PI * 2);
   ctx.fill();
 
-  // Partículas espirales
   for (const p of gparticles) {
     const rot = t * p.speed + camAngle;
     const x = cx + p.baseX * Math.cos(rot) - p.baseY * Math.sin(rot);
@@ -156,7 +168,6 @@ function drawGalaxy(t, camAngle = 0) {
     ctx.fill();
   }
 
-  // Núcleo duro
   const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, 28);
   core.addColorStop(0,   'rgba(255,255,220,1)');
   core.addColorStop(0.4, 'rgba(255,210,120,0.8)');
@@ -168,16 +179,73 @@ function drawGalaxy(t, camAngle = 0) {
 }
 
 // ─────────────────────────────────────────────
-//  UTILIDADES DE DIBUJO
+//  GALAXIAS DISTANTES (universo)
+// ─────────────────────────────────────────────
+// dxm/dym: multiplicadores sobre cx/cy para la posición en espacio mundo
+const DISTANT_GALAXIES = [
+  { dxm:  3.8, dym:  0.3, scl: 0.52, hOff:  50, spd: 0.00009, arms: 2 },
+  { dxm: -3.4, dym: -0.7, scl: 0.38, hOff: -40, spd: 0.00013, arms: 3 },
+  { dxm:  0.5, dym:  4.0, scl: 0.45, hOff:  95, spd: 0.00010, arms: 2 },
+  { dxm: -0.6, dym: -3.8, scl: 0.33, hOff: -70, spd: 0.00015, arms: 4 },
+  { dxm:  3.2, dym: -3.2, scl: 0.40, hOff: 130, spd: 0.00008, arms: 2 },
+  { dxm: -3.0, dym:  3.4, scl: 0.48, hOff:-115, spd: 0.00011, arms: 3 },
+  { dxm:  1.6, dym: -4.2, scl: 0.28, hOff: 200, spd: 0.00014, arms: 2 },
+  { dxm: -4.2, dym:  1.4, scl: 0.36, hOff:-160, spd: 0.00009, arms: 2 },
+  { dxm:  5.5, dym:  2.2, scl: 0.22, hOff: 170, spd: 0.00012, arms: 3 },
+  { dxm: -5.0, dym: -2.5, scl: 0.25, hOff:-200, spd: 0.00010, arms: 2 },
+];
+
+function drawMiniGalaxy(gx, gy, scl, hOff, angle) {
+  const R = 280 * scl;
+
+  // halo exterior
+  const halo = ctx.createRadialGradient(gx, gy, 0, gx, gy, R);
+  halo.addColorStop(0,   `hsla(${50 + hOff},80%,70%,0.28)`);
+  halo.addColorStop(0.4, `hsla(${220+hOff},60%,45%,0.10)`);
+  halo.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(gx, gy, R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // brazos espirales deterministas (sin random → sin parpadeo)
+  for (let i = 0; i < 380; i++) {
+    const arm  = i % 2;
+    const frac = i / 380;
+    const dist = (0.04 + frac * 0.95) * R;
+    const a    = arm * Math.PI + frac * Math.PI * 4.2 + angle
+               + Math.sin(i * 7.31) * 0.22;
+    const sp   = Math.sin(i * 13.71) * dist * 0.10;
+    const px   = gx + Math.cos(a) * dist + sp;
+    const py   = gy + Math.sin(a) * dist * 0.36 + Math.cos(i * 13.71) * sp * 0.3;
+    const al   = (0.18 + frac * 0.55) * scl;
+    const hue  = frac > 0.6 ? 200 + hOff : 50 + hOff;
+    ctx.fillStyle = `hsla(${hue},70%,80%,${al})`;
+    ctx.fillRect(px - 0.8, py - 0.8, 1.6, 1.6);
+  }
+
+  // núcleo
+  const core = ctx.createRadialGradient(gx, gy, 0, gx, gy, 16 * scl);
+  core.addColorStop(0,   `hsla(${50+hOff},100%,98%,0.95)`);
+  core.addColorStop(0.6, `hsla(${40+hOff},80%,70%,0.40)`);
+  core.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(gx, gy, 16 * scl, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ─────────────────────────────────────────────
+//  UTILIDADES
 // ─────────────────────────────────────────────
 function circle(x, y, r, fill, stroke, sw = 1) {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  if (fill)   { ctx.fillStyle   = fill;  ctx.fill();   }
+  if (fill)   { ctx.fillStyle   = fill;   ctx.fill();   }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = sw; ctx.stroke(); }
 }
 
-function glow(x, y, r, color) {
+function glowAt(x, y, r, color) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0,   color.replace(')', ',0.5)').replace('hsl', 'hsla'));
   g.addColorStop(0.5, color.replace(')', ',0.15)').replace('hsl', 'hsla'));
@@ -189,284 +257,167 @@ function glow(x, y, r, color) {
 }
 
 // ─────────────────────────────────────────────
-//  CAPA 4 · CUERPOS ORBITALES (planetas, lunas, cometa)
+//  CAPA 4 · PLANETAS
 // ─────────────────────────────────────────────
-
-// ── Planeta 1: Volcánico ──────────────────────
 function drawVolcanic(px, py, r, t) {
-  // superficie
-  const g = ctx.createRadialGradient(px - r*0.3, py - r*0.3, r*0.1, px, py, r);
-  g.addColorStop(0,   '#ff6a00');
-  g.addColorStop(0.4, '#c83200');
-  g.addColorStop(0.8, '#6b1800');
-  g.addColorStop(1,   '#2a0800');
+  const g = ctx.createRadialGradient(px-r*0.3, py-r*0.3, r*0.1, px, py, r);
+  g.addColorStop(0, '#ff6a00'); g.addColorStop(0.4, '#c83200');
+  g.addColorStop(0.8, '#6b1800'); g.addColorStop(1, '#2a0800');
   circle(px, py, r, g);
-
-  // grietas de lava
   ctx.save();
-  ctx.clip(); // clip dentro del planeta ya trazado
-  // redibuja para clip
   ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.clip();
-  ctx.strokeStyle = `rgba(255,${100 + 80*Math.sin(t*0.002)},0,0.7)`;
-  ctx.lineWidth   = 1.2;
+  ctx.strokeStyle = `rgba(255,${100+80*Math.sin(t*0.002)},0,0.7)`;
+  ctx.lineWidth = 1.2;
   for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2 + t * 0.0003;
+    const a = (i/5)*Math.PI*2 + t*0.0003;
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.quadraticCurveTo(
-      px + Math.cos(a + 0.5) * r * 0.6,
-      py + Math.sin(a + 0.5) * r * 0.6,
-      px + Math.cos(a) * r * 0.95,
-      py + Math.sin(a) * r * 0.95
-    );
+    ctx.quadraticCurveTo(px+Math.cos(a+0.5)*r*0.6, py+Math.sin(a+0.5)*r*0.6,
+                         px+Math.cos(a)*r*0.95,     py+Math.sin(a)*r*0.95);
     ctx.stroke();
   }
   ctx.restore();
-
-  // atmósfera
-  glow(px, py, r * 2.2, 'hsl(20,100%,50%)');
+  glowAt(px, py, r*2.2, 'hsl(20,100%,50%)');
 }
 
-// ── Planeta 2: Oceánico-Vida ──────────────────
 function drawOcean(px, py, r, t) {
-  // océano base
-  const g = ctx.createRadialGradient(px - r*0.3, py - r*0.3, r*0.05, px, py, r);
-  g.addColorStop(0,   '#4adde8');
-  g.addColorStop(0.3, '#1a8fbf');
-  g.addColorStop(0.7, '#0a4a8a');
-  g.addColorStop(1,   '#040f3a');
+  const g = ctx.createRadialGradient(px-r*0.3, py-r*0.3, r*0.05, px, py, r);
+  g.addColorStop(0, '#4adde8'); g.addColorStop(0.3, '#1a8fbf');
+  g.addColorStop(0.7, '#0a4a8a'); g.addColorStop(1, '#040f3a');
   circle(px, py, r, g);
-
   ctx.save();
   ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.clip();
-
-  // continentes
-  const continents = [
-    {ox: -0.15, oy: -0.2, w: 0.45, h: 0.38},
-    {ox:  0.2,  oy:  0.1, w: 0.35, h: 0.30},
-    {ox: -0.4,  oy:  0.3, w: 0.28, h: 0.22},
-  ];
+  const continents = [{ox:-0.15,oy:-0.2,w:0.45,h:0.38},{ox:0.2,oy:0.1,w:0.35,h:0.30},{ox:-0.4,oy:0.3,w:0.28,h:0.22}];
   for (const c of continents) {
-    const landG = ctx.createRadialGradient(
-      px + c.ox*r, py + c.oy*r, 0,
-      px + c.ox*r, py + c.oy*r, c.w*r
-    );
-    landG.addColorStop(0,   '#4a8c3f');
-    landG.addColorStop(0.5, '#2d6e28');
-    landG.addColorStop(1,   'transparent');
-    ctx.fillStyle = landG;
+    const lg = ctx.createRadialGradient(px+c.ox*r, py+c.oy*r, 0, px+c.ox*r, py+c.oy*r, c.w*r);
+    lg.addColorStop(0, '#4a8c3f'); lg.addColorStop(0.5, '#2d6e28'); lg.addColorStop(1, 'transparent');
+    ctx.fillStyle = lg;
     ctx.beginPath();
-    ctx.ellipse(px + c.ox*r, py + c.oy*r, c.w*r, c.h*r, 0.4, 0, Math.PI*2);
+    ctx.ellipse(px+c.ox*r, py+c.oy*r, c.w*r, c.h*r, 0.4, 0, Math.PI*2);
     ctx.fill();
   }
-
-  // nubes animadas
   ctx.globalAlpha = 0.55;
   for (let i = 0; i < 4; i++) {
-    const ca = (i / 4) * Math.PI * 2 + t * 0.0004;
-    const cg = ctx.createRadialGradient(
-      px + Math.cos(ca)*r*0.5, py + Math.sin(ca)*r*0.3, 0,
-      px + Math.cos(ca)*r*0.5, py + Math.sin(ca)*r*0.3, r*0.28
-    );
-    cg.addColorStop(0,   'rgba(255,255,255,0.8)');
-    cg.addColorStop(1,   'rgba(255,255,255,0)');
+    const ca = (i/4)*Math.PI*2 + t*0.0004;
+    const cg = ctx.createRadialGradient(px+Math.cos(ca)*r*0.5, py+Math.sin(ca)*r*0.3, 0,
+                                        px+Math.cos(ca)*r*0.5, py+Math.sin(ca)*r*0.3, r*0.28);
+    cg.addColorStop(0, 'rgba(255,255,255,0.8)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = cg;
     ctx.beginPath();
-    ctx.ellipse(
-      px + Math.cos(ca)*r*0.5, py + Math.sin(ca)*r*0.3,
-      r*0.28, r*0.12, ca, 0, Math.PI*2
-    );
+    ctx.ellipse(px+Math.cos(ca)*r*0.5, py+Math.sin(ca)*r*0.3, r*0.28, r*0.12, ca, 0, Math.PI*2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
   ctx.restore();
-
-  // atmósfera azul
-  glow(px, py, r * 2.0, 'hsl(200,100%,60%)');
-  // capa atmosférica rim
+  glowAt(px, py, r*2.0, 'hsl(200,100%,60%)');
   const atm = ctx.createRadialGradient(px, py, r*0.85, px, py, r*1.08);
-  atm.addColorStop(0, 'rgba(100,200,255,0)');
-  atm.addColorStop(1, 'rgba(100,200,255,0.25)');
+  atm.addColorStop(0, 'rgba(100,200,255,0)'); atm.addColorStop(1, 'rgba(100,200,255,0.25)');
   circle(px, py, r*1.08, atm);
 }
 
-// ── Planeta 3: Gigante gaseoso ────────────────
 function drawGasGiant(px, py, r, t) {
-  // cuerpo base
-  const g = ctx.createRadialGradient(px - r*0.25, py - r*0.3, r*0.1, px, py, r);
-  g.addColorStop(0,   '#f5d78e');
-  g.addColorStop(0.2, '#e8a850');
-  g.addColorStop(0.5, '#c97030');
-  g.addColorStop(0.8, '#8a4010');
-  g.addColorStop(1,   '#3a1800');
+  const g = ctx.createRadialGradient(px-r*0.25, py-r*0.3, r*0.1, px, py, r);
+  g.addColorStop(0, '#f5d78e'); g.addColorStop(0.2, '#e8a850');
+  g.addColorStop(0.5, '#c97030'); g.addColorStop(0.8, '#8a4010'); g.addColorStop(1, '#3a1800');
   circle(px, py, r, g);
-
   ctx.save();
   ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.clip();
-
-  // bandas horizontales
-  const bands = [
-    {oy: -0.55, h: 0.18, a: 0.35, hue: 30},
-    {oy: -0.25, h: 0.14, a: 0.25, hue: 25},
-    {oy:  0.05, h: 0.20, a: 0.30, hue: 20},
-    {oy:  0.38, h: 0.15, a: 0.28, hue: 15},
-  ];
-  for (const b of bands) {
-    ctx.fillStyle = `hsla(${b.hue},50%,20%,${b.a})`;
-    ctx.fillRect(px - r, py + b.oy*r, r*2, b.h*r);
+  for (const b of [{oy:-0.55,h:0.18,a:0.35},{oy:-0.25,h:0.14,a:0.25},{oy:0.05,h:0.20,a:0.30},{oy:0.38,h:0.15,a:0.28}]) {
+    ctx.fillStyle = `rgba(0,0,0,${b.a})`;
+    ctx.fillRect(px-r, py+b.oy*r, r*2, b.h*r);
   }
-
-  // Gran Mancha (tormenta)
-  const gsx = px + Math.cos(t * 0.0002) * r * 0.3;
+  const gsx = px + Math.cos(t*0.0002)*r*0.3;
   ctx.fillStyle = 'rgba(180,80,30,0.45)';
   ctx.beginPath();
-  ctx.ellipse(gsx, py + r*0.1, r*0.22, r*0.13, 0, 0, Math.PI*2);
+  ctx.ellipse(gsx, py+r*0.1, r*0.22, r*0.13, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
-
-  // Anillos
   ctx.save();
-  ctx.translate(px, py);
-  ctx.scale(1, 0.28);
+  ctx.translate(px, py); ctx.scale(1, 0.28);
   for (let ri = 0; ri < 3; ri++) {
-    const rr = r * (1.5 + ri * 0.22);
-    const rw = r * (0.14 - ri * 0.02);
-    ctx.strokeStyle = `rgba(200,160,90,${0.35 - ri * 0.08})`;
-    ctx.lineWidth   = rw;
+    ctx.strokeStyle = `rgba(200,160,90,${0.35-ri*0.08})`;
+    ctx.lineWidth = r*(0.14-ri*0.02);
     ctx.beginPath();
-    ctx.arc(0, 0, rr, 0, Math.PI * 2);
+    ctx.arc(0, 0, r*(1.5+ri*0.22), 0, Math.PI*2);
     ctx.stroke();
   }
   ctx.restore();
-
-  glow(px, py, r * 2.5, 'hsl(35,80%,50%)');
+  glowAt(px, py, r*2.5, 'hsl(35,80%,50%)');
 }
 
-// ── Planeta 4: Mundo Helado ───────────────────
 function drawIce(px, py, r, t) {
-  const g = ctx.createRadialGradient(px - r*0.3, py - r*0.3, r*0.05, px, py, r);
-  g.addColorStop(0,   '#e8f8ff');
-  g.addColorStop(0.3, '#90d8f5');
-  g.addColorStop(0.7, '#3090c0');
-  g.addColorStop(1,   '#082040');
+  const g = ctx.createRadialGradient(px-r*0.3, py-r*0.3, r*0.05, px, py, r);
+  g.addColorStop(0, '#e8f8ff'); g.addColorStop(0.3, '#90d8f5');
+  g.addColorStop(0.7, '#3090c0'); g.addColorStop(1, '#082040');
   circle(px, py, r, g);
-
   ctx.save();
   ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.clip();
-
-  // casquetes polares
   ctx.fillStyle = 'rgba(240,250,255,0.8)';
-  ctx.beginPath();
-  ctx.ellipse(px, py - r*0.72, r*0.55, r*0.32, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(px, py + r*0.78, r*0.45, r*0.25, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  // grietas de hielo
-  ctx.strokeStyle = 'rgba(180,230,255,0.5)';
-  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.ellipse(px, py-r*0.72, r*0.55, r*0.32, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(px, py+r*0.78, r*0.45, r*0.25, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = 'rgba(180,230,255,0.5)'; ctx.lineWidth = 0.8;
   for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px + Math.cos(a)*r, py + Math.sin(a)*r);
-    ctx.stroke();
+    const a = (i/6)*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px+Math.cos(a)*r, py+Math.sin(a)*r); ctx.stroke();
   }
   ctx.restore();
-
-  glow(px, py, r * 1.9, 'hsl(195,90%,70%)');
-
-  // tenue atmósfera
-  const atm = ctx.createRadialGradient(px, py, r*0.9, px, py, r*1.1);
-  atm.addColorStop(0, 'rgba(180,230,255,0)');
-  atm.addColorStop(1, 'rgba(180,230,255,0.2)');
-  circle(px, py, r*1.1, atm);
+  glowAt(px, py, r*1.9, 'hsl(195,90%,70%)');
 }
 
-// ── Luna ─────────────────────────────────────
 function drawMoon(px, py, r) {
-  const g = ctx.createRadialGradient(px - r*0.3, py - r*0.3, r*0.05, px, py, r);
-  g.addColorStop(0,   '#d0d0c8');
-  g.addColorStop(0.6, '#909088');
-  g.addColorStop(1,   '#404038');
+  const g = ctx.createRadialGradient(px-r*0.3, py-r*0.3, r*0.05, px, py, r);
+  g.addColorStop(0, '#d0d0c8'); g.addColorStop(0.6, '#909088'); g.addColorStop(1, '#404038');
   circle(px, py, r, g);
-  // cráteres
   ctx.fillStyle = 'rgba(40,40,35,0.35)';
-  const craters = [{ox:0.2,oy:-0.25,r:0.2},{ox:-0.3,oy:0.1,r:0.14},{ox:0.1,oy:0.3,r:0.12}];
-  for (const c of craters) {
-    ctx.beginPath();
-    ctx.arc(px+c.ox*r, py+c.oy*r, c.r*r, 0, Math.PI*2);
-    ctx.fill();
+  for (const c of [{ox:0.2,oy:-0.25,r:0.2},{ox:-0.3,oy:0.1,r:0.14},{ox:0.1,oy:0.3,r:0.12}]) {
+    ctx.beginPath(); ctx.arc(px+c.ox*r, py+c.oy*r, c.r*r, 0, Math.PI*2); ctx.fill();
   }
 }
 
-// ── Cometa ────────────────────────────────────
-function drawComet(px, py, angle, speed, t) {
-  // Cola
-  const tailLen = 90 + 30 * Math.sin(t * 0.002);
-  const tailDir = angle + Math.PI;
-  const grad = ctx.createLinearGradient(px, py, px + Math.cos(tailDir)*tailLen, py + Math.sin(tailDir)*tailLen);
+function drawComet(px, py, angle, t) {
+  const tailLen = 90 + 30*Math.sin(t*0.002);
+  const td = angle + Math.PI;
+  const grad = ctx.createLinearGradient(px, py, px+Math.cos(td)*tailLen, py+Math.sin(td)*tailLen);
   grad.addColorStop(0,   'rgba(180,230,255,0.7)');
   grad.addColorStop(0.4, 'rgba(100,180,255,0.3)');
   grad.addColorStop(1,   'rgba(50,100,255,0)');
   ctx.save();
-  ctx.lineWidth   = 6;
-  ctx.strokeStyle = grad;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.cos(tailDir)*tailLen, py + Math.sin(tailDir)*tailLen);
+  ctx.lineWidth = 6; ctx.strokeStyle = grad; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(px, py);
+  ctx.lineTo(px+Math.cos(td)*tailLen, py+Math.sin(td)*tailLen);
   ctx.stroke();
-  // segunda cola más fina
-  ctx.lineWidth   = 2.5;
-  ctx.strokeStyle = 'rgba(200,240,255,0.25)';
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.cos(tailDir+0.15)*tailLen*0.7, py + Math.sin(tailDir+0.15)*tailLen*0.7);
+  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(200,240,255,0.25)';
+  ctx.beginPath(); ctx.moveTo(px, py);
+  ctx.lineTo(px+Math.cos(td+0.15)*tailLen*0.7, py+Math.sin(td+0.15)*tailLen*0.7);
   ctx.stroke();
   ctx.restore();
-  // Núcleo
-  glow(px, py, 16, 'hsl(200,100%,80%)');
+  glowAt(px, py, 16, 'hsl(200,100%,80%)');
   circle(px, py, 4, '#d0f0ff');
 }
 
-// ── Criaturas Orbitales (mariposas/peces de estrellas) ──
 function drawCreature(px, py, t, id) {
-  const phase = t * 0.003 + id * 1.7;
-  const flap  = Math.sin(phase) * 0.5 + 0.5;
+  const flap = Math.sin(t*0.003 + id*1.7)*0.5 + 0.5;
   ctx.save();
   ctx.translate(px, py);
-
-  // alas
-  const wingColor = `hsla(${160 + id * 40},80%,70%,0.7)`;
-  ctx.fillStyle   = wingColor;
-  ctx.beginPath();
-  ctx.ellipse(-5 * (0.3 + flap * 0.7), -2, 7*(0.4+flap*0.6), 4, -0.4, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse( 5 * (0.3 + flap * 0.7), -2, 7*(0.4+flap*0.6), 4,  0.4, 0, Math.PI*2);
-  ctx.fill();
-
-  // cuerpo
-  ctx.fillStyle = `hsla(${200 + id*30},60%,80%,0.9)`;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 2, 5, 0, 0, Math.PI*2);
-  ctx.fill();
+  ctx.fillStyle = `hsla(${160+id*40},80%,70%,0.7)`;
+  ctx.beginPath(); ctx.ellipse(-5*(0.3+flap*0.7), -2, 7*(0.4+flap*0.6), 4, -0.4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 5*(0.3+flap*0.7), -2, 7*(0.4+flap*0.6), 4,  0.4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = `hsla(${200+id*30},60%,80%,0.9)`;
+  ctx.beginPath(); ctx.ellipse(0, 0, 2, 5, 0, 0, Math.PI*2); ctx.fill();
   ctx.restore();
 }
 
-// ── Cinturón de asteroides ────────────────────
+// ─────────────────────────────────────────────
+//  CINTURÓN DE ASTEROIDES
+// ─────────────────────────────────────────────
 let asteroids = [];
 function buildAsteroids() {
   asteroids = [];
   for (let i = 0; i < 160; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist  = 0.92 + Math.random() * 0.16; // normalizado (se escala luego)
     asteroids.push({
-      angle,
-      dist,
-      size: 0.8 + Math.random() * 2.0,
+      angle: Math.random() * Math.PI * 2,
+      dist:  0.92 + Math.random() * 0.16,
+      size:  0.8 + Math.random() * 2.0,
       speed: (0.00012 + Math.random() * 0.0001) * (Math.random() < 0.5 ? 1 : -1),
       alpha: 0.5 + Math.random() * 0.5,
     });
@@ -474,83 +425,61 @@ function buildAsteroids() {
 }
 buildAsteroids();
 
-function drawAsteroids(t, beltMinR, beltMaxR, camAngle = 0) {
+function drawAsteroids(t, minR, maxR, camAngle) {
   for (const a of asteroids) {
-    const r   = beltMinR + a.dist * (beltMaxR - beltMinR);
+    const r   = minR + a.dist * (maxR - minR);
     const ang = a.angle + t * a.speed + camAngle;
-    const ax  = cx + Math.cos(ang) * r;
-    const ay  = cy + Math.sin(ang) * r * 0.4;
     ctx.fillStyle = `rgba(160,145,120,${a.alpha})`;
     ctx.beginPath();
-    ctx.arc(ax, ay, a.size, 0, Math.PI*2);
+    ctx.arc(cx + Math.cos(ang)*r, cy + Math.sin(ang)*r*0.4, a.size, 0, Math.PI*2);
     ctx.fill();
   }
 }
 
-// ─────────────────────────────────────────────
-//  ÓRBITAS
-// ─────────────────────────────────────────────
 function drawOrbit(rx, ry, alpha = 0.1) {
   ctx.strokeStyle = `rgba(140,160,200,${alpha})`;
-  ctx.lineWidth   = 0.5;
-  ctx.setLineDash([3, 8]);
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.lineWidth = 0.5; ctx.setLineDash([3, 8]);
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); ctx.stroke();
   ctx.setLineDash([]);
 }
 
 // ─────────────────────────────────────────────
-//  CAPA 5 · CRIATURAS + PARTÍCULAS DE VIDA
+//  PARTÍCULAS DE VIDA
 // ─────────────────────────────────────────────
 let lifeParticles = [];
-function spawnLifeParticles(px, py) {
+function spawnLife(px, py) {
   for (let i = 0; i < 2; i++) {
     lifeParticles.push({
-      x: px + (Math.random() - 0.5) * 20,
-      y: py + (Math.random() - 0.5) * 20,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      life: 1,
-      hue: 120 + Math.random() * 80,
+      x: px + (Math.random()-0.5)*20, y: py + (Math.random()-0.5)*20,
+      vx: (Math.random()-0.5)*0.4,    vy: (Math.random()-0.5)*0.4,
+      life: 1, hue: 120 + Math.random()*80,
     });
   }
 }
-function updateLifeParticles() {
+function updateLife() {
   lifeParticles = lifeParticles.filter(p => {
-    p.x   += p.vx;
-    p.y   += p.vy;
-    p.life -= 0.008;
+    p.x += p.vx; p.y += p.vy; p.life -= 0.008;
     return p.life > 0;
   });
   for (const p of lifeParticles) {
-    ctx.fillStyle = `hsla(${p.hue},80%,70%,${p.life * 0.6})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.5, 0, Math.PI*2);
-    ctx.fill();
+    ctx.fillStyle = `hsla(${p.hue},80%,70%,${p.life*0.6})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, Math.PI*2); ctx.fill();
   }
 }
 
 // ─────────────────────────────────────────────
 //  DEFINICIÓN DE ÓRBITAS
 // ─────────────────────────────────────────────
-const SCALE = Math.min(W, H) / 1000;
-
 const ORBITS = [
-  { rxBase: 155, ryRatio: 0.42, speed: 0.00060, startAngle: 0.5,    r: 13, drawFn: drawVolcanic,  moons: [] },
-  { rxBase: 250, ryRatio: 0.42, speed: 0.00037, startAngle: 2.1,    r: 18, drawFn: drawOcean,
-    moons: [{ dist: 32, speed: 0.0028, r: 5 }],
-    creatures: [0, 1, 2] },
-  { rxBase: 390, ryRatio: 0.42, speed: 0.00020, startAngle: 4.2,    r: 28, drawFn: drawGasGiant,
+  { rxBase: 155, ryRatio: 0.42, speed: 0.00060, startAngle: 0.5, r: 13, drawFn: drawVolcanic, moons: [] },
+  { rxBase: 250, ryRatio: 0.42, speed: 0.00037, startAngle: 2.1, r: 18, drawFn: drawOcean,
+    moons: [{ dist: 32, speed: 0.0028, r: 5 }], creatures: [0, 1, 2] },
+  { rxBase: 390, ryRatio: 0.42, speed: 0.00020, startAngle: 4.2, r: 28, drawFn: drawGasGiant,
     moons: [{ dist: 48, speed: 0.0020, r: 6 }, { dist: 68, speed: 0.0014, r: 4 }] },
-  { rxBase: 510, ryRatio: 0.42, speed: 0.00012, startAngle: 1.0,    r: 15, drawFn: drawIce,
+  { rxBase: 510, ryRatio: 0.42, speed: 0.00012, startAngle: 1.0, r: 15, drawFn: drawIce,
     moons: [{ dist: 28, speed: 0.0025, r: 5 }] },
 ];
-
-// Cometa: órbita muy excéntrica
-const COMET = { rxBase: 600, ryRatio: 0.15, speed: 0.00055, startAngle: 3.1 };
-
-// Cinturón entre órbita 2 y 3
+const COMET    = { rxBase: 600, ryRatio: 0.15, speed: 0.00055, startAngle: 3.1 };
 const BELT_MIN = 315, BELT_MAX = 365;
 
 // ─────────────────────────────────────────────
@@ -559,87 +488,88 @@ const BELT_MIN = 315, BELT_MAX = 365;
 let t = 0;
 function frame() {
   t++;
+  zoom += (targetZoom - zoom) * 0.055;
 
-  // Rotación global: toda la galaxia gira lentamente
-  const camAngle = t * 0.00022;
+  // Rotación global (3× más rápida que antes)
+  const camAngle = t * 0.00068;
+
+  // Alpha de aparición del universo (empieza a verse al alejarse)
+  const universeAlpha = Math.max(0, Math.min(1, (0.62 - zoom) / 0.32));
 
   ctx.fillStyle = '#000008';
   ctx.fillRect(0, 0, W, H);
 
-  // — Capa 1: Estrellas (fijas, infinitamente lejos) —
+  // — Fondo fijo: estrellas y nebulosas —
   drawStars(t);
-
-  // — Capa 2: Nebulosas —
   drawNebula();
 
-  // — Capa 3: Galaxia (con rotación global) —
+  // ── Zona con zoom ──────────────────────────
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-cx, -cy);
+
+  // Universo: galaxias distantes (aparecen al alejarse)
+  if (universeAlpha > 0) {
+    ctx.globalAlpha = universeAlpha;
+    for (const dg of DISTANT_GALAXIES) {
+      const gx = cx + dg.dxm * cx;
+      const gy = cy + dg.dym * cy;
+      drawMiniGalaxy(gx, gy, dg.scl, dg.hOff, t * dg.spd);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Galaxia principal
   drawGalaxy(t, camAngle);
 
-  // — Órbitas (elipses simétricas, no cambian con rotación) —
-  for (const o of ORBITS) {
-    const rx = o.rxBase;
-    const ry = rx * o.ryRatio;
-    drawOrbit(rx, ry, 0.12);
-  }
-  drawOrbit(BELT_MIN + 25, (BELT_MIN + 25) * 0.42, 0.06);
+  // Órbitas
+  for (const o of ORBITS) drawOrbit(o.rxBase, o.rxBase * o.ryRatio, 0.12);
+  drawOrbit(BELT_MIN+25, (BELT_MIN+25)*0.42, 0.06);
 
-  // — Cinturón de asteroides —
+  // Cinturón de asteroides
   drawAsteroids(t, BELT_MIN, BELT_MAX, camAngle);
 
-  // — Cometa —
+  // Cometa
   {
-    const rx  = COMET.rxBase;
-    const ry  = rx * COMET.ryRatio;
+    const rx  = COMET.rxBase, ry = rx * COMET.ryRatio;
     const ang = COMET.startAngle + t * COMET.speed + camAngle;
-    const cpx = cx + Math.cos(ang) * rx;
-    const cpy = cy + Math.sin(ang) * ry;
-    const vx  = -Math.sin(ang);
-    const vy  =  Math.cos(ang) * COMET.ryRatio;
-    const cometAngle = Math.atan2(vy, vx);
-    drawComet(cpx, cpy, cometAngle, COMET.speed, t);
+    const cpx = cx + Math.cos(ang)*rx, cpy = cy + Math.sin(ang)*ry;
+    drawComet(cpx, cpy, Math.atan2(Math.cos(ang)*COMET.ryRatio, -Math.sin(ang)), t);
   }
 
-  // — Planetas y lunas —
+  // Planetas, lunas y criaturas
   for (const o of ORBITS) {
-    const rx  = o.rxBase;
-    const ry  = rx * o.ryRatio;
+    const rx  = o.rxBase, ry = rx * o.ryRatio;
     const ang = o.startAngle + t * o.speed + camAngle;
-    const px  = cx + Math.cos(ang) * rx;
-    const py  = cy + Math.sin(ang) * ry;
+    const px  = cx + Math.cos(ang)*rx;
+    const py  = cy + Math.sin(ang)*ry;
 
-    // Sombra proyectada
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.beginPath();
-    ctx.ellipse(px + o.r * 0.4, py + o.r * 0.4, o.r, o.r * 0.5, 0.3, 0, Math.PI*2);
+    ctx.ellipse(px+o.r*0.4, py+o.r*0.4, o.r, o.r*0.5, 0.3, 0, Math.PI*2);
     ctx.fill();
 
     o.drawFn(px, py, o.r, t);
 
-    // lunas
-    if (o.moons) {
-      for (const m of o.moons) {
-        const ma  = ang * 3 + t * m.speed;
-        const mx  = px + Math.cos(ma) * m.dist;
-        const my  = py + Math.sin(ma) * m.dist * 0.5;
-        drawMoon(mx, my, m.r);
-      }
+    for (const m of (o.moons || [])) {
+      const ma = ang*3 + t*m.speed;
+      drawMoon(px+Math.cos(ma)*m.dist, py+Math.sin(ma)*m.dist*0.5, m.r);
     }
 
-    // criaturas orbitando el planeta oceánico
     if (o.creatures) {
       for (const id of o.creatures) {
-        const ca  = ang + t * 0.0018 + id * (Math.PI * 2 / 3);
+        const ca  = ang + t*0.0018 + id*(Math.PI*2/3);
         const crd = o.r + 22;
-        const crx = px + Math.cos(ca) * crd;
-        const cry = py + Math.sin(ca) * crd * 0.6;
-        drawCreature(crx, cry, t, id);
+        drawCreature(px+Math.cos(ca)*crd, py+Math.sin(ca)*crd*0.6, t, id);
       }
-      spawnLifeParticles(px, py);
+      spawnLife(px, py);
     }
   }
 
-  // — Partículas de vida —
-  updateLifeParticles();
+  updateLife();
+  ctx.restore();
+  // ── Fin zona con zoom ──────────────────────
 
   requestAnimationFrame(frame);
 }
