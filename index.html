@@ -124,60 +124,92 @@ const GLYPHS = {
 };
 
 let textStars = [];
+let textLetters = [];   // estrellas agrupadas por letra (para trazar líneas)
 function buildTextStars() {
   textStars = [];
+  textLetters = [];
   const word = "TE AMO";
-  // ancho total en columnas (con 1 col de separación entre letras)
   let totalCols = 0;
   for (let i = 0; i < word.length; i++) {
     totalCols += GLYPHS[word[i]][0].length;
     if (i < word.length - 1) totalCols += 1;
   }
-  // tamaño del punto adaptado a la pantalla
-  const cell = Math.min((W * 0.78) / totalCols, H * 0.034);
+  // MÁS GRANDE: ocupa hasta 90% del ancho y celdas más altas
+  const cell = Math.min((W * 0.90) / totalCols, H * 0.050);
   const startX = cx - (totalCols * cell) / 2;
-  const baseY  = H * 0.30 - (7 * cell) / 2;
+  const baseY  = H * 0.26 - (7 * cell) / 2;
 
   let colCursor = 0;
   for (let i = 0; i < word.length; i++) {
     const glyph = GLYPHS[word[i]];
     const gW = glyph[0].length;
+    const letterPts = [];
     for (let row = 0; row < glyph.length; row++) {
       for (let col = 0; col < gW; col++) {
         if (glyph[row][col] === '#') {
-          textStars.push({
+          const st = {
             x: startX + (colCursor + col) * cell + cell / 2,
             y: baseY + row * cell + cell / 2,
-            r: Math.max(1.3, cell * 0.16),
+            r: Math.max(2.2, cell * 0.22),
             to: Math.random() * Math.PI * 2,
             ts: 0.02 + Math.random() * 0.03,
-          });
+          };
+          textStars.push(st);
+          letterPts.push(st);
         }
       }
     }
+    if (letterPts.length) textLetters.push(letterPts);
     colCursor += gW + 1;
   }
 }
 buildTextStars();
 
 function drawTextStars(t) {
-  // aparición/desvanecido lento y latido global
-  const breathe = 0.55 + 0.45 * Math.sin(t * 0.006);
+  // latido marcado (más contraste entre claro y tenue)
+  const beat = Math.pow(0.5 + 0.5 * Math.sin(t * 0.05), 1.5); // pulso tipo corazón
+  const breathe = 0.72 + 0.28 * Math.sin(t * 0.006);
+  const glowBoost = 0.6 + 0.4 * beat;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter'; // los brillos se suman → resalta
+
+  // líneas que unen las estrellas dentro de cada letra
+  ctx.strokeStyle = `rgba(255,130,180,${0.22 + beat * 0.22})`;
+  ctx.lineWidth   = 1.4;
+  for (const letter of textLetters) {
+    for (let i = 0; i < letter.length; i++) {
+      for (let j = i + 1; j < letter.length; j++) {
+        const dx = letter[i].x - letter[j].x;
+        const dy = letter[i].y - letter[j].y;
+        // solo conecta estrellas vecinas
+        if (dx * dx + dy * dy < (textStars[0].r * 14) ** 2) {
+          ctx.beginPath();
+          ctx.moveTo(letter[i].x, letter[i].y);
+          ctx.lineTo(letter[j].x, letter[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
   for (const s of textStars) {
-    const tw = 0.65 + 0.35 * Math.sin(t * s.ts + s.to);
+    const tw = 0.8 + 0.2 * Math.sin(t * s.ts + s.to);
     const a  = breathe * tw;
     const R  = s.r;
-    // halo rosado
-    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, R * 4);
-    g.addColorStop(0,   `rgba(255,210,230,${a})`);
-    g.addColorStop(0.4, `rgba(255,120,180,${a * 0.5})`);
-    g.addColorStop(1,   'rgba(255,80,150,0)');
+    // halo rosado grande y luminoso
+    const haloR = R * 6 * glowBoost;
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, haloR);
+    g.addColorStop(0,   `rgba(255,180,215,${a})`);
+    g.addColorStop(0.3, `rgba(255,90,160,${a * 0.6})`);
+    g.addColorStop(1,   'rgba(255,60,140,0)');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(s.x, s.y, R * 4, 0, Math.PI * 2); ctx.fill();
-    // núcleo brillante
-    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, a + 0.2)})`;
+    ctx.beginPath(); ctx.arc(s.x, s.y, haloR, 0, Math.PI * 2); ctx.fill();
+    // núcleo blanco brillante
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, a + 0.35)})`;
     ctx.beginPath(); ctx.arc(s.x, s.y, R, 0, Math.PI * 2); ctx.fill();
   }
+  ctx.restore();
 }
 
 // ─────────────────────────────────────────────
