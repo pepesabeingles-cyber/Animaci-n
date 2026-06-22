@@ -8,10 +8,29 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: #000; overflow: hidden; overscroll-behavior: none; touch-action: none; }
     canvas { display: block; touch-action: none; }
+    #music {
+      position: fixed; top: 16px; right: 16px; z-index: 10;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1px solid rgba(255,150,200,0.5);
+      background: rgba(40,10,30,0.4); color: #ffaad0;
+      font-size: 20px; cursor: pointer; backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s, background 0.2s;
+    }
+    #music:hover { transform: scale(1.1); background: rgba(80,20,50,0.6); }
+    #hint {
+      position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+      z-index: 10; color: rgba(255,180,210,0.85); font-family: system-ui, sans-serif;
+      font-size: 14px; letter-spacing: 1px; pointer-events: none;
+      text-shadow: 0 0 10px rgba(255,80,150,0.7); animation: pulseHint 2s infinite;
+    }
+    @keyframes pulseHint { 0%,100%{opacity:0.45} 50%{opacity:1} }
   </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<button id="music" aria-label="música">♪</button>
+<div id="hint">toca la pantalla para la melodía 🎵</div>
 <script>
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -808,6 +827,129 @@ const COMET_ICE  = { rxBase: 580, ryRatio: 0.13, speed: 0.00055, startAngle: 3.1
 const COMET_AMOR = { rxBase: 720, ryRatio: 0.18, speed: 0.00032, startAngle: 0.8,  hue: 330 };
 
 const BELT_MIN = 315, BELT_MAX = 365;
+
+// ─────────────────────────────────────────────
+//  MELODÍA (estilo balada suave, arpegio + eco)
+//  Composición original inspirada en el aire de
+//  baladas acústicas tipo "Photograph".
+// ─────────────────────────────────────────────
+let audioCtx = null, masterGain = null, delayWet = null;
+let musicOn = false, schedulerTimer = null;
+let nextNoteTime = 0, step = 0;
+
+const EIGHTH = 0.36;                 // duración de corchea (~83 BPM)
+const ARP_PATTERN = [0, 1, 2, 3, 2, 3, 1, 2];
+
+// Progresión E · B · C#m · A (cálida, romántica)
+const PROGRESSION = [
+  { bass: 82.41,  arp: [164.81, 207.65, 246.94, 329.63], pad: [164.81, 246.94] }, // E
+  { bass: 123.47, arp: [246.94, 311.13, 369.99, 493.88], pad: [246.94, 369.99] }, // B
+  { bass: 138.59, arp: [277.18, 329.63, 415.30, 554.37], pad: [277.18, 415.30] }, // C#m
+  { bass: 110.00, arp: [220.00, 277.18, 329.63, 440.00], pad: [220.00, 329.63] }, // A
+];
+
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.0001;
+  masterGain.connect(audioCtx.destination);
+  // fundido de entrada
+  masterGain.gain.exponentialRampToValueAtTime(0.45, audioCtx.currentTime + 2.5);
+
+  // eco suave (sensación de espacio/reverb)
+  const delay = audioCtx.createDelay();
+  delay.delayTime.value = EIGHTH * 0.75;
+  const fb = audioCtx.createGain(); fb.gain.value = 0.30;
+  delay.connect(fb); fb.connect(delay);
+  delayWet = audioCtx.createGain(); delayWet.gain.value = 0.32;
+  delay.connect(delayWet); delayWet.connect(masterGain);
+  window._delayNode = delay;
+}
+
+function note(freq, time, dur, vol, type = 'sine') {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  o.connect(g);
+  g.connect(masterGain);
+  g.connect(window._delayNode);
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.linearRampToValueAtTime(vol, time + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  o.start(time);
+  o.stop(time + dur + 0.05);
+}
+
+function scheduleStep(s, time) {
+  const bar = Math.floor(s / 8) % PROGRESSION.length;
+  const pos = s % 8;
+  const chord = PROGRESSION[bar];
+
+  // arpegio (guitarra suave)
+  note(chord.arp[ARP_PATTERN[pos]], time, 0.9, 0.16, 'triangle');
+
+  // al inicio de cada compás: bajo + pad sostenido
+  if (pos === 0) {
+    note(chord.bass, time, 2.4, 0.18, 'sine');
+    for (const p of chord.pad) note(p, time, 2.6, 0.05, 'sine');
+  }
+  // pequeño adorno melódico en contratiempo
+  if (pos === 4) note(chord.arp[3] * 2, time, 0.7, 0.07, 'sine');
+}
+
+function scheduler() {
+  while (nextNoteTime < audioCtx.currentTime + 0.2) {
+    scheduleStep(step, nextNoteTime);
+    nextNoteTime += EIGHTH;
+    step = (step + 1) % (PROGRESSION.length * 8);
+  }
+}
+
+function startMusic() {
+  if (!audioCtx) initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  nextNoteTime = audioCtx.currentTime + 0.1;
+  step = 0;
+  schedulerTimer = setInterval(scheduler, 25);
+  musicOn = true;
+  document.getElementById('music').textContent = '♪';
+}
+
+function stopMusic() {
+  clearInterval(schedulerTimer);
+  if (masterGain) {
+    masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6);
+  }
+  musicOn = false;
+  document.getElementById('music').textContent = '🔇';
+}
+
+function toggleMusic() {
+  if (musicOn) stopMusic();
+  else startMusic();
+}
+
+// Iniciar con el primer toque/clic (requisito de los navegadores)
+function firstGesture() {
+  if (!musicOn) startMusic();
+  const hint = document.getElementById('hint');
+  if (hint) hint.style.display = 'none';
+  window.removeEventListener('pointerdown', firstGesture);
+  window.removeEventListener('keydown', firstGesture);
+}
+window.addEventListener('pointerdown', firstGesture);
+window.addEventListener('keydown', firstGesture);
+
+// Botón de música (no propaga al gesto global)
+document.getElementById('music').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const hint = document.getElementById('hint');
+  if (hint) hint.style.display = 'none';
+  toggleMusic();
+});
 
 // ─────────────────────────────────────────────
 //  BUCLE PRINCIPAL
