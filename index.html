@@ -133,7 +133,7 @@ function buildGalaxy() {
 }
 buildGalaxy();
 
-function drawGalaxy(t) {
+function drawGalaxy(t, camAngle = 0) {
   // Glow central
   const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
   glow.addColorStop(0,    'rgba(255,240,180,0.55)');
@@ -147,7 +147,7 @@ function drawGalaxy(t) {
 
   // Partículas espirales
   for (const p of gparticles) {
-    const rot = t * p.speed;
+    const rot = t * p.speed + camAngle;
     const x = cx + p.baseX * Math.cos(rot) - p.baseY * Math.sin(rot);
     const y = cy + p.baseX * Math.sin(rot) + p.baseY * Math.cos(rot);
     ctx.fillStyle = `hsla(${p.hue},${p.sat}%,${p.lit}%,${p.alpha})`;
@@ -474,10 +474,10 @@ function buildAsteroids() {
 }
 buildAsteroids();
 
-function drawAsteroids(t, beltMinR, beltMaxR) {
+function drawAsteroids(t, beltMinR, beltMaxR, camAngle = 0) {
   for (const a of asteroids) {
     const r   = beltMinR + a.dist * (beltMaxR - beltMinR);
-    const ang = a.angle + t * a.speed;
+    const ang = a.angle + t * a.speed + camAngle;
     const ax  = cx + Math.cos(ang) * r;
     const ay  = cy + Math.sin(ang) * r * 0.4;
     ctx.fillStyle = `rgba(160,145,120,${a.alpha})`;
@@ -559,35 +559,38 @@ const BELT_MIN = 315, BELT_MAX = 365;
 let t = 0;
 function frame() {
   t++;
+
+  // Rotación global: toda la galaxia gira lentamente
+  const camAngle = t * 0.00022;
+
   ctx.fillStyle = '#000008';
   ctx.fillRect(0, 0, W, H);
 
-  // — Capa 1: Estrellas —
+  // — Capa 1: Estrellas (fijas, infinitamente lejos) —
   drawStars(t);
 
   // — Capa 2: Nebulosas —
   drawNebula();
 
-  // — Capa 3: Galaxia —
-  drawGalaxy(t);
+  // — Capa 3: Galaxia (con rotación global) —
+  drawGalaxy(t, camAngle);
 
-  // — Órbitas (líneas guía) —
+  // — Órbitas (elipses simétricas, no cambian con rotación) —
   for (const o of ORBITS) {
     const rx = o.rxBase;
     const ry = rx * o.ryRatio;
     drawOrbit(rx, ry, 0.12);
   }
-  // cinturón
   drawOrbit(BELT_MIN + 25, (BELT_MIN + 25) * 0.42, 0.06);
 
   // — Cinturón de asteroides —
-  drawAsteroids(t, BELT_MIN, BELT_MAX);
+  drawAsteroids(t, BELT_MIN, BELT_MAX, camAngle);
 
   // — Cometa —
   {
     const rx  = COMET.rxBase;
     const ry  = rx * COMET.ryRatio;
-    const ang = COMET.startAngle + t * COMET.speed;
+    const ang = COMET.startAngle + t * COMET.speed + camAngle;
     const cpx = cx + Math.cos(ang) * rx;
     const cpy = cy + Math.sin(ang) * ry;
     const vx  = -Math.sin(ang);
@@ -600,7 +603,7 @@ function frame() {
   for (const o of ORBITS) {
     const rx  = o.rxBase;
     const ry  = rx * o.ryRatio;
-    const ang = o.startAngle + t * o.speed;
+    const ang = o.startAngle + t * o.speed + camAngle;
     const px  = cx + Math.cos(ang) * rx;
     const py  = cy + Math.sin(ang) * ry;
 
