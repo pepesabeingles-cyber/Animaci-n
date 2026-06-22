@@ -15,23 +15,30 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
-let W, H, cx, cy;
+let W, H, cx, cy, DPR;
 
 function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  // Backing store a resolución real del dispositivo → nitidez al acercar
+  DPR = Math.min(window.devicePixelRatio || 1, 3);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
   cx = W / 2; cy = H / 2;
 }
 resize();
-window.addEventListener('resize', () => { resize(); buildStars(); buildNebula(); buildHeartConstellation(); });
+window.addEventListener('resize', () => { resize(); buildStars(); buildNebula(); buildHeartConstellation(); buildTextStars(); });
 
 // ─────────────────────────────────────────────
 //  ZOOM
 // ─────────────────────────────────────────────
 let zoom = 1, targetZoom = 1;
+const ZOOM_MIN = 0.06, ZOOM_MAX = 5;
 window.addEventListener('wheel', e => {
   targetZoom *= e.deltaY > 0 ? 0.88 : 1.14;
-  targetZoom  = Math.max(0.06, Math.min(2.2, targetZoom));
+  targetZoom  = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom));
 }, { passive: true });
 let lastPinchDist = null;
 function pinchDist(e) {
@@ -42,7 +49,7 @@ canvas.addEventListener('touchstart',  e => { if (e.touches.length === 2) lastPi
 canvas.addEventListener('touchmove',   e => {
   if (e.touches.length === 2 && lastPinchDist) {
     const d = pinchDist(e); targetZoom *= d / lastPinchDist;
-    targetZoom = Math.max(0.06, Math.min(2.2, targetZoom)); lastPinchDist = d;
+    targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom)); lastPinchDist = d;
   }
 }, { passive: true });
 canvas.addEventListener('touchend', () => { lastPinchDist = null; }, { passive: true });
@@ -74,6 +81,76 @@ function drawStars(t) {
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
     ctx.fill();
+  }
+}
+
+// ─────────────────────────────────────────────
+//  ESTRELLAS QUE FORMAN "TE AMO" (constelación texto)
+// ─────────────────────────────────────────────
+// Cada letra es una matriz 5×7 (# = estrella)
+const GLYPHS = {
+  T: ["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+  E: ["#####","#....","#....","####.","#....","#....","#####"],
+  A: [".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+  M: ["#...#","##.##","#.#.#","#.#.#","#...#","#...#","#...#"],
+  O: [".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+  " ": ["...","...","...","...","...","...","..."],
+};
+
+let textStars = [];
+function buildTextStars() {
+  textStars = [];
+  const word = "TE AMO";
+  // ancho total en columnas (con 1 col de separación entre letras)
+  let totalCols = 0;
+  for (let i = 0; i < word.length; i++) {
+    totalCols += GLYPHS[word[i]][0].length;
+    if (i < word.length - 1) totalCols += 1;
+  }
+  // tamaño del punto adaptado a la pantalla
+  const cell = Math.min((W * 0.78) / totalCols, H * 0.034);
+  const startX = cx - (totalCols * cell) / 2;
+  const baseY  = H * 0.30 - (7 * cell) / 2;
+
+  let colCursor = 0;
+  for (let i = 0; i < word.length; i++) {
+    const glyph = GLYPHS[word[i]];
+    const gW = glyph[0].length;
+    for (let row = 0; row < glyph.length; row++) {
+      for (let col = 0; col < gW; col++) {
+        if (glyph[row][col] === '#') {
+          textStars.push({
+            x: startX + (colCursor + col) * cell + cell / 2,
+            y: baseY + row * cell + cell / 2,
+            r: Math.max(1.3, cell * 0.16),
+            to: Math.random() * Math.PI * 2,
+            ts: 0.02 + Math.random() * 0.03,
+          });
+        }
+      }
+    }
+    colCursor += gW + 1;
+  }
+}
+buildTextStars();
+
+function drawTextStars(t) {
+  // aparición/desvanecido lento y latido global
+  const breathe = 0.55 + 0.45 * Math.sin(t * 0.006);
+  for (const s of textStars) {
+    const tw = 0.65 + 0.35 * Math.sin(t * s.ts + s.to);
+    const a  = breathe * tw;
+    const R  = s.r;
+    // halo rosado
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, R * 4);
+    g.addColorStop(0,   `rgba(255,210,230,${a})`);
+    g.addColorStop(0.4, `rgba(255,120,180,${a * 0.5})`);
+    g.addColorStop(1,   'rgba(255,80,150,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R * 4, 0, Math.PI * 2); ctx.fill();
+    // núcleo brillante
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, a + 0.2)})`;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R, 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -310,7 +387,13 @@ function spawnCosmicHeart() {
 }
 
 function updateCosmicHearts(t) {
-  if (t % 38 === 0) { spawnCosmicHeart(); if (Math.random() < 0.4) spawnCosmicHeart(); }
+  // Más corazones: nacen más seguido y en grupos
+  if (t % 14 === 0) {
+    spawnCosmicHeart();
+    spawnCosmicHeart();
+    if (Math.random() < 0.6) spawnCosmicHeart();
+    if (Math.random() < 0.3) spawnCosmicHeart();
+  }
 
   cosmicHearts = cosmicHearts.filter(h => h.life > 0);
   for (const h of cosmicHearts) {
@@ -616,6 +699,9 @@ function frame() {
   const camAngle    = t * 0.00068;
   const universeAlpha = Math.max(0, Math.min(1, (0.62 - zoom) / 0.32));
 
+  // Transform base a resolución del dispositivo (nitidez sin pixelado)
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
   ctx.fillStyle = '#000008';
   ctx.fillRect(0, 0, W, H);
 
@@ -623,6 +709,7 @@ function frame() {
   drawStars(t);
   drawNebula();
   drawHeartConstellation(t);
+  drawTextStars(t);
 
   // ── Zona con zoom ──────────────────────────
   ctx.save();
